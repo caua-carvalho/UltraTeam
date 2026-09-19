@@ -4,6 +4,7 @@ import { AuthProvider, useAuth } from '@/components/AuthProvider';
 import { Navbar } from '@/components/Navbar';
 import { LoginPage } from '@/pages/LoginPage';
 import { DashboardPage } from '@/pages/DashboardPage';
+import { PlanningPage } from '@/pages/PlanningPage';
 import { ActivitiesPage } from '@/pages/ActivitiesPage';
 import { NewActivityPage } from '@/pages/NewActivityPage';
 import { EditActivityPage } from '@/pages/EditActivityPage';
@@ -38,6 +39,15 @@ export const App: React.FC = () => {
               element={
                 <ProtectedLayout>
                   <DashboardPage />
+                </ProtectedLayout>
+              }
+            />
+
+            <Route
+              path="/planning"
+              element={
+                <ProtectedLayout>
+                  <PlanningPage />
                 </ProtectedLayout>
               }
             />

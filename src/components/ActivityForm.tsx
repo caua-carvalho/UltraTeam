@@ -1,9 +1,10 @@
-import React, { useState } from 'react';
-import { Activity, ActivityType } from '@/lib/types';
+import React, { useState, useEffect } from 'react';
+import { Activity, ActivityType, TrainingWeek } from '@/lib/types';
 import { Button } from './ui/Button';
 import { Input } from './ui/Input';
+import { getWeekStart, getWeekEnd, formatDate, isDateInWeek, formatFullDate } from '@/lib/utils';
 
-interface ActivityFormData {
+export interface ActivityFormData {
   title: string;
   distance_km: number | string;
   duration_min: number | string;
@@ -11,10 +12,12 @@ interface ActivityFormData {
   scheduled_date: string;
   completed: boolean;
   notes: string;
+  week_id?: string;
 }
 
 interface ActivityFormProps {
   initialData?: Partial<Activity>;
+  targetWeek?: TrainingWeek | null;
   onSubmit: (data: ActivityFormData) => Promise<void>;
   onCancel?: () => void;
   submitLabel?: string;
@@ -24,12 +27,18 @@ interface ActivityFormProps {
 
 export const ActivityForm: React.FC<ActivityFormProps> = ({
   initialData,
+  targetWeek,
   onSubmit,
   onCancel,
   submitLabel = 'SALVAR MISSÃO',
   isEdit = false,
   onDelete,
 }) => {
+  const initialDate =
+    initialData?.scheduled_date ||
+    targetWeek?.week_start ||
+    new Date().toISOString().split('T')[0];
+
   const [formData, setFormData] = useState<ActivityFormData>({
     title: initialData?.title || '',
     distance_km: initialData?.distance_km !== undefined ? initialData.distance_km : '',
@@ -38,13 +47,36 @@ export const ActivityForm: React.FC<ActivityFormProps> = ({
         ? initialData.duration_min
         : '',
     activity_type: initialData?.activity_type || 'longo',
-    scheduled_date: initialData?.scheduled_date || new Date().toISOString().split('T')[0],
+    scheduled_date: initialDate,
     completed: initialData?.completed ?? false,
     notes: initialData?.notes || '',
+    week_id: initialData?.week_id || targetWeek?.id,
   });
 
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [isSubmitting, setIsSubmitting] = useState(false);
+
+  // Derived current week boundary for the selected date
+  const currentWeekStart = targetWeek?.week_start || getWeekStart(formData.scheduled_date);
+  const currentWeekEnd = targetWeek?.week_end || getWeekEnd(formData.scheduled_date);
+
+  // Re-verify if date is in selected week boundary
+  useEffect(() => {
+    if (targetWeek) {
+      if (!isDateInWeek(formData.scheduled_date, targetWeek.week_start, targetWeek.week_end)) {
+        setErrors((prev) => ({
+          ...prev,
+          scheduled_date: `Data deve estar dentro da semana (${formatDate(targetWeek.week_start)} a ${formatDate(targetWeek.week_end)})`,
+        }));
+      } else {
+        setErrors((prev) => {
+          const updated = { ...prev };
+          delete updated.scheduled_date;
+          return updated;
+        });
+      }
+    }
+  }, [formData.scheduled_date, targetWeek]);
 
   const activityTypes: { value: ActivityType; label: string; desc: string }[] = [
     { value: 'longo', label: 'LONGO', desc: 'Resistência & Volume (Zona 2)' },
@@ -66,6 +98,14 @@ export const ActivityForm: React.FC<ActivityFormProps> = ({
 
     if (!formData.scheduled_date) {
       newErrors.scheduled_date = 'Data programada é obrigatória';
+    } else {
+      // Validate week boundary
+      const weekStart = targetWeek ? targetWeek.week_start : getWeekStart(formData.scheduled_date);
+      const weekEnd = targetWeek ? targetWeek.week_end : getWeekEnd(formData.scheduled_date);
+
+      if (!isDateInWeek(formData.scheduled_date, weekStart, weekEnd)) {
+        newErrors.scheduled_date = `Data fora do intervalo da semana vinculada (${formatDate(weekStart)} a ${formatDate(weekEnd)})`;
+      }
     }
 
     if (formData.duration_min && Number(formData.duration_min) < 0) {
@@ -96,6 +136,24 @@ export const ActivityForm: React.FC<ActivityFormProps> = ({
 
   return (
     <form onSubmit={handleSubmit} className="space-y-6">
+      {/* Week Association Telemetry Banner */}
+      <div className="bg-[#0A0A0A] border border-[#2A343D] p-3.5 flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+        <div className="flex items-center space-x-2">
+          <span className="w-2 h-2 bg-[#00FF66] inline-block animate-pulse" />
+          <div className="flex flex-col">
+            <span className="font-mono text-[10px] text-[#8F9CA8] uppercase tracking-tactical">
+              SEMANA OPERACIONAL VINCULADA
+            </span>
+            <span className="font-mono text-xs sm:text-sm font-bold text-[#FFFFFF]">
+              {formatDate(currentWeekStart)} — {formatDate(currentWeekEnd)}
+            </span>
+          </div>
+        </div>
+        <div className="font-mono text-[11px] text-[#00FF66] bg-[#00FF66]/10 px-2.5 py-1 border border-[#00FF66]/30 self-start sm:self-auto uppercase">
+          DIA SELECIONADO: {formatFullDate(formData.scheduled_date) || '—'}
+        </div>
+      </div>
+
       {/* Title */}
       <Input
         label="TÍTULO DA MISSÃO"
@@ -167,8 +225,15 @@ export const ActivityForm: React.FC<ActivityFormProps> = ({
           label="DATA DA MISSÃO"
           type="date"
           value={formData.scheduled_date}
+          min={targetWeek ? targetWeek.week_start : undefined}
+          max={targetWeek ? targetWeek.week_end : undefined}
           onChange={(e) => setFormData({ ...formData, scheduled_date: e.target.value })}
           error={errors.scheduled_date}
+          helperText={
+            targetWeek
+              ? `Permitido apenas: ${targetWeek.week_start} até ${targetWeek.week_end}`
+              : `Semana: ${currentWeekStart} até ${currentWeekEnd}`
+          }
           required
         />
       </div>

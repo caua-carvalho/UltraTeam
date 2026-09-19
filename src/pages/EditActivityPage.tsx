@@ -1,10 +1,12 @@
 import React, { useEffect, useState, useCallback } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { useAuth } from '@/components/AuthProvider';
-import { supabase, Activity } from '@/lib/supabase';
-import { ActivityForm } from '@/components/ActivityForm';
+import { supabase, Activity, TrainingWeek } from '@/lib/supabase';
+import { PlanningService } from '@/lib/planningService';
+import { ActivityForm, ActivityFormData } from '@/components/ActivityForm';
 import { Card } from '@/components/ui/Card';
 import { Loading } from '@/components/ui/Loading';
+import { getWeekStart, getWeekEnd, isDateInWeek } from '@/lib/utils';
 
 export const EditActivityPage: React.FC = () => {
   const { user } = useAuth();
@@ -12,6 +14,7 @@ export const EditActivityPage: React.FC = () => {
   const { id: activityId } = useParams<{ id: string }>();
 
   const [activity, setActivity] = useState<Activity | null>(null);
+  const [targetWeek, setTargetWeek] = useState<TrainingWeek | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [errorMessage, setErrorMessage] = useState('');
 
@@ -32,6 +35,23 @@ export const EditActivityPage: React.FC = () => {
         setErrorMessage('Missão não encontrada ou acesso negado.');
       } else {
         setActivity(data);
+
+        // Fetch or create associated week
+        if (data.scheduled_date) {
+          const weekStart = getWeekStart(data.scheduled_date);
+          const weekEnd = getWeekEnd(data.scheduled_date);
+          setTargetWeek({
+            id: data.week_id || `week-${weekStart}`,
+            user_id: user.id,
+            week_start: weekStart,
+            week_end: weekEnd,
+            title: null,
+            target_km: null,
+            notes: null,
+            created_at: new Date().toISOString(),
+            updated_at: new Date().toISOString(),
+          });
+        }
       }
     } catch (err) {
       console.error('Exception fetching activity:', err);
@@ -45,40 +65,45 @@ export const EditActivityPage: React.FC = () => {
     fetchActivity();
   }, [fetchActivity]);
 
-  const handleUpdate = async (formData: any) => {
+  const handleUpdate = async (formData: ActivityFormData) => {
     if (!user || !activityId) return;
     setErrorMessage('');
 
-    try {
-      const { error } = await supabase
-        .from('activities')
-        .update({
-          title: formData.title,
-          distance_km: formData.distance_km,
-          duration_min: formData.duration_min || null,
-          activity_type: formData.activity_type,
-          scheduled_date: formData.scheduled_date,
-          completed: formData.completed,
-          notes: formData.notes?.trim() || null,
-          updated_at: new Date().toISOString(),
-        })
-        .eq('id', activityId)
-        .eq('user_id', user.id);
+    // If week is targeted, validate date is in week
+    const currentWeekStart = getWeekStart(formData.scheduled_date);
+    const currentWeekEnd = getWeekEnd(formData.scheduled_date);
 
-      if (error) {
-        throw error;
-      }
-
-      navigate('/activities');
-    } catch (err: any) {
-      console.error('Error updating activity:', err);
-      setErrorMessage(err.message || 'Falha ao atualizar missão.');
+    if (targetWeek && !isDateInWeek(formData.scheduled_date, targetWeek.week_start, targetWeek.week_end)) {
+      // User changed date to another week, let's update targetWeek dynamically or block
+      // If user deliberately changed date, let's ensure it maps to the new week cleanly:
+      const confirmMove = window.confirm(
+        `A nova data (${formData.scheduled_date}) pertence a outra semana (${currentWeekStart} a ${currentWeekEnd}). Deseja mover esta missão para a nova semana?`
+      );
+      if (!confirmMove) return;
     }
+
+    const { error } = await PlanningService.updateMission(user.id, activityId, {
+      title: formData.title,
+      distance_km: Number(formData.distance_km),
+      duration_min: formData.duration_min ? Number(formData.duration_min) : null,
+      activity_type: formData.activity_type,
+      scheduled_date: formData.scheduled_date,
+      completed: formData.completed,
+      notes: formData.notes,
+      week_id: formData.week_id,
+    });
+
+    if (error) {
+      setErrorMessage(error);
+      return;
+    }
+
+    navigate('/planning');
   };
 
   const handleDelete = async () => {
     const confirm = window.confirm(
-      'ALERTA: Deseja realmente excluir definitivamente este registro de treino?'
+      'ALERTA OPERACIONAL: Deseja realmente excluir definitivamente este registro de missão?'
     );
     if (!confirm || !user || !activityId) return;
 
@@ -93,7 +118,7 @@ export const EditActivityPage: React.FC = () => {
         throw error;
       }
 
-      navigate('/activities');
+      navigate('/planning');
     } catch (err: any) {
       console.error('Error deleting activity:', err);
       setErrorMessage(err.message || 'Falha ao excluir missão.');
@@ -133,8 +158,9 @@ export const EditActivityPage: React.FC = () => {
       </div>
 
       {errorMessage && (
-        <div className="p-3 bg-[#FF2A3D]/10 border-l-2 border-[#FF2A3D] text-[#FF2A3D] font-mono text-xs">
-          [ERRO]: {errorMessage}
+        <div className="p-3 bg-[#FF2A3D]/10 border-l-2 border-[#FF2A3D] text-[#FF2A3D] font-mono text-xs flex items-center space-x-2">
+          <span>[!]</span>
+          <span>{errorMessage}</span>
         </div>
       )}
 
@@ -143,8 +169,9 @@ export const EditActivityPage: React.FC = () => {
         {activity && (
           <ActivityForm
             initialData={activity}
+            targetWeek={targetWeek}
             onSubmit={handleUpdate}
-            onCancel={() => navigate('/activities')}
+            onCancel={() => navigate('/planning')}
             onDelete={handleDelete}
             submitLabel="ATUALIZAR MISSÃO"
             isEdit={true}

@@ -1,7 +1,8 @@
 import React, { useEffect, useState, useCallback } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useSearchParams } from 'react-router-dom';
 import { useAuth } from '@/components/AuthProvider';
 import { supabase, WeeklyGoal } from '@/lib/supabase';
+import { PlanningService } from '@/lib/planningService';
 import { getWeekStart } from '@/lib/utils';
 import { GoalForm } from '@/components/GoalForm';
 import { Card } from '@/components/ui/Card';
@@ -10,11 +11,12 @@ import { Loading } from '@/components/ui/Loading';
 export const GoalsPage: React.FC = () => {
   const { user } = useAuth();
   const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
   const [currentGoal, setCurrentGoal] = useState<WeeklyGoal | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [statusMessage, setStatusMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
 
-  const currentWeek = getWeekStart();
+  const selectedWeekStart = searchParams.get('week_start') || getWeekStart();
 
   const fetchCurrentGoal = useCallback(async () => {
     if (!user) return;
@@ -25,7 +27,7 @@ export const GoalsPage: React.FC = () => {
         .from('weekly_goals')
         .select('*')
         .eq('user_id', user.id)
-        .eq('week_start', currentWeek)
+        .eq('week_start', selectedWeekStart)
         .maybeSingle();
 
       if (error) {
@@ -38,7 +40,7 @@ export const GoalsPage: React.FC = () => {
     } finally {
       setIsLoading(false);
     }
-  }, [user, currentWeek]);
+  }, [user, selectedWeekStart]);
 
   useEffect(() => {
     fetchCurrentGoal();
@@ -48,50 +50,24 @@ export const GoalsPage: React.FC = () => {
     if (!user) return;
     setStatusMessage(null);
 
-    try {
-      if (currentGoal?.id) {
-        const { data, error } = await supabase
-          .from('weekly_goals')
-          .update({
-            title: formData.title,
-            target_km: formData.target_km,
-            updated_at: new Date().toISOString(),
-          })
-          .eq('id', currentGoal.id)
-          .eq('user_id', user.id)
-          .select()
-          .single();
+    const { error } = await PlanningService.saveWeekGoal(user.id, formData.week_start, {
+      title: formData.title,
+      target_km: formData.target_km,
+    });
 
-        if (error) throw error;
-        setCurrentGoal(data);
-        setStatusMessage({ type: 'success', text: 'Ordens semanais atualizadas com sucesso.' });
-      } else {
-        const { data, error } = await supabase
-          .from('weekly_goals')
-          .insert({
-            user_id: user.id,
-            title: formData.title,
-            target_km: formData.target_km,
-            week_start: formData.week_start,
-          })
-          .select()
-          .single();
-
-        if (error) throw error;
-        setCurrentGoal(data);
-        setStatusMessage({ type: 'success', text: 'Novas ordens semanais estabelecidas!' });
-      }
-
-      setTimeout(() => {
-        navigate('/dashboard');
-      }, 1200);
-    } catch (err: any) {
-      console.error('Error saving goal:', err);
+    if (error) {
       setStatusMessage({
         type: 'error',
-        text: err.message || 'Falha ao salvar meta no banco de dados.',
+        text: error,
       });
+      return;
     }
+
+    setStatusMessage({ type: 'success', text: 'Ordens semanais estabelecidas com sucesso!' });
+
+    setTimeout(() => {
+      navigate('/planning');
+    }, 1000);
   };
 
   if (!user) {
@@ -132,9 +108,9 @@ export const GoalsPage: React.FC = () => {
           <Loading message="CARREGANDO METAS ATUAIS..." />
         ) : (
           <GoalForm
-            initialData={currentGoal}
+            initialData={currentGoal || ({ week_start: selectedWeekStart } as any)}
             onSubmit={handleSaveGoal}
-            onCancel={() => navigate('/dashboard')}
+            onCancel={() => navigate('/planning')}
           />
         )}
       </Card>
