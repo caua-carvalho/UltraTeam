@@ -13,6 +13,7 @@ export const Navbar: React.FC = () => {
 
   const navLinks = [
     { href: '/dashboard', label: 'WAR ROOM' },
+    { href: '/planning', label: 'PLANEJAMENTO' },
     { href: '/activities', label: 'MISSÕES' },
     { href: '/goals', label: 'METAS' },
   ];

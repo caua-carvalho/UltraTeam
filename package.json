@@ -6,6 +6,7 @@
   "scripts": {
     "dev": "vite",
     "build": "tsc && vite build",
+    "test": "tsx src/test/planning.test.ts",
     "preview": "vite preview"
   },
   "dependencies": {
@@ -24,6 +25,7 @@
     "postcss": "^8.4.38",
     "supabase": "^1.187.5",
     "tailwindcss": "^3.4.6",
+    "tsx": "^4.23.13",
     "typescript": "^5.5.4",
     "vite": "^5.4.2"
   }

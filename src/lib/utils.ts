@@ -1,23 +1,114 @@
 /**
- * Get Monday of the current week in YYYY-MM-DD format
+ * Formats a Date object to YYYY-MM-DD local string without timezone shifting.
  */
-export function getWeekStart(date: Date = new Date()): string {
-  const d = new Date(date);
-  const day = d.getDay();
-  const diff = d.getDate() - day + (day === 0 ? -6 : 1); // adjust when day is sunday
-  const monday = new Date(d.setDate(diff));
-  return monday.toISOString().split('T')[0]; // YYYY-MM-DD
+export function formatLocalDateToISO(date: Date): string {
+  const year = date.getFullYear();
+  const month = String(date.getMonth() + 1).padStart(2, '0');
+  const day = String(date.getDate()).padStart(2, '0');
+  return `${year}-${month}-${day}`;
 }
 
 /**
- * Get Sunday of the current week in YYYY-MM-DD format
+ * Safely parses a YYYY-MM-DD string into a local Date object at noon (12:00:00) to avoid timezone shifts.
  */
-export function getWeekEnd(date: Date = new Date()): string {
+export function parseISODate(dateString: string): Date {
+  if (!dateString) return new Date();
+  if (dateString.includes('T')) {
+    return new Date(dateString);
+  }
+  const [year, month, day] = dateString.split('-').map(Number);
+  if (!year || !month || !day) return new Date();
+  return new Date(year, month - 1, day, 12, 0, 0);
+}
+
+/**
+ * Get Monday of the week for a given date in YYYY-MM-DD format (Monday = 1st day of week)
+ */
+export function getWeekStart(date: Date | string = new Date()): string {
+  const d = typeof date === 'string' ? parseISODate(date) : new Date(date);
+  const day = d.getDay(); // 0 = Sunday, 1 = Monday, ..., 6 = Saturday
+  const diff = d.getDate() - day + (day === 0 ? -6 : 1); // adjust when day is Sunday
+  d.setDate(diff);
+  return formatLocalDateToISO(d);
+}
+
+/**
+ * Get Sunday of the week for a given date in YYYY-MM-DD format (Sunday = last day of week)
+ */
+export function getWeekEnd(date: Date | string = new Date()): string {
   const mondayStr = getWeekStart(date);
-  const monday = new Date(mondayStr);
+  const monday = parseISODate(mondayStr);
   const sunday = new Date(monday);
   sunday.setDate(monday.getDate() + 6);
-  return sunday.toISOString().split('T')[0];
+  return formatLocalDateToISO(sunday);
+}
+
+/**
+ * Add or subtract a number of weeks from a date string (YYYY-MM-DD)
+ */
+export function addWeeks(dateString: string, weeks: number): string {
+  const d = parseISODate(dateString);
+  d.setDate(d.getDate() + weeks * 7);
+  return formatLocalDateToISO(d);
+}
+
+/**
+ * Add days to a date string
+ */
+export function addDays(dateString: string, days: number): string {
+  const d = parseISODate(dateString);
+  d.setDate(d.getDate() + days);
+  return formatLocalDateToISO(d);
+}
+
+/**
+ * Get all 7 days of the week starting from Monday
+ */
+export function getWeekDays(mondayStr: string): Array<{
+  dateStr: string;
+  dayNumber: number;
+  dayName: string;
+  isToday: boolean;
+  isPast: boolean;
+}> {
+  const todayStr = formatLocalDateToISO(new Date());
+  const monday = parseISODate(mondayStr);
+  const dayNames = ['SEG', 'TER', 'QUA', 'QUI', 'SEX', 'SÁB', 'DOM'];
+
+  return Array.from({ length: 7 }, (_, i) => {
+    const current = new Date(monday);
+    current.setDate(monday.getDate() + i);
+    const dateStr = formatLocalDateToISO(current);
+
+    return {
+      dateStr,
+      dayNumber: current.getDate(),
+      dayName: dayNames[i],
+      isToday: dateStr === todayStr,
+      isPast: dateStr < todayStr,
+    };
+  });
+}
+
+/**
+ * Check if a date is within [weekStart, weekEnd] inclusive
+ */
+export function isDateInWeek(dateStr: string, weekStart: string, weekEnd: string): boolean {
+  return dateStr >= weekStart && dateStr <= weekEnd;
+}
+
+/**
+ * Check if date is today
+ */
+export function isToday(dateStr: string): boolean {
+  return dateStr === formatLocalDateToISO(new Date());
+}
+
+/**
+ * Check if date is in the past
+ */
+export function isPastDate(dateStr: string): boolean {
+  return dateStr < formatLocalDateToISO(new Date());
 }
 
 /**
@@ -25,7 +116,7 @@ export function getWeekEnd(date: Date = new Date()): string {
  */
 export function formatDate(dateString: string): string {
   if (!dateString) return '';
-  const date = dateString.includes('T') ? new Date(dateString) : new Date(`${dateString}T12:00:00`);
+  const date = parseISODate(dateString);
   return date
     .toLocaleDateString('pt-BR', {
       day: '2-digit',
@@ -36,11 +127,25 @@ export function formatDate(dateString: string): string {
 }
 
 /**
+ * Format date with month and year (e.g., "SET 2026")
+ */
+export function formatMonthYear(dateString: string): string {
+  if (!dateString) return '';
+  const date = parseISODate(dateString);
+  return date
+    .toLocaleDateString('pt-BR', {
+      month: 'long',
+      year: 'numeric',
+    })
+    .toUpperCase();
+}
+
+/**
  * Format full date with day of week (e.g., "SEG, 18 SET")
  */
 export function formatFullDate(dateString: string): string {
   if (!dateString) return '';
-  const date = dateString.includes('T') ? new Date(dateString) : new Date(`${dateString}T12:00:00`);
+  const date = parseISODate(dateString);
   return date
     .toLocaleDateString('pt-BR', {
       weekday: 'short',
@@ -104,12 +209,13 @@ export function getActivityTypeBadgeColor(type: string): {
 /**
  * Calculate week number of the year
  */
-export function getWeekNumber(date: Date = new Date()): number {
-  const d = new Date(Date.UTC(date.getFullYear(), date.getMonth(), date.getDate()));
-  const dayNum = d.getUTCDay() || 7;
-  d.setUTCDate(d.getUTCDate() + 4 - dayNum);
-  const yearStart = new Date(Date.UTC(d.getUTCFullYear(), 0, 1));
-  return Math.ceil(((d.getTime() - yearStart.getTime()) / 86400000 + 1) / 7);
+export function getWeekNumber(date: Date | string = new Date()): number {
+  const d = typeof date === 'string' ? parseISODate(date) : new Date(date);
+  const target = new Date(Date.UTC(d.getFullYear(), d.getMonth(), d.getDate()));
+  const dayNum = target.getUTCDay() || 7;
+  target.setUTCDate(target.getUTCDate() + 4 - dayNum);
+  const yearStart = new Date(Date.UTC(target.getUTCFullYear(), 0, 1));
+  return Math.ceil(((target.getTime() - yearStart.getTime()) / 86400000 + 1) / 7);
 }
 
 /**
