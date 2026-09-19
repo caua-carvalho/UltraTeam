@@ -1,0 +1,3 @@
+-- Seed file for local testing or demo setup
+-- Note: Profiles are normally linked to auth.users.
+-- You can run this after users are created in Supabase Auth.

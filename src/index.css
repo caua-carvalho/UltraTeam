@@ -1,0 +1,39 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  --background: #060709;
+  --foreground: #e3e2e5;
+}
+
+body {
+  color: var(--foreground);
+  background: var(--background);
+  font-family: 'Chivo', sans-serif;
+  -webkit-font-smoothing: antialiased;
+}
+
+/* Custom Tactical Scrollbar */
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+
+::-webkit-scrollbar-track {
+  background: #060709;
+}
+
+::-webkit-scrollbar-thumb {
+  background: #2A343D;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: #00FF66;
+}
+
+/* Base selection styling */
+::selection {
+  background-color: #00FF66;
+  color: #060709;
+}
